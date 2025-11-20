@@ -254,6 +254,18 @@ class YouTubeService {
             errorType: error?.name
           });
           
+          // Check for parsing errors (YouTube structure changed)
+          if (errorMessage.includes('parsing watch.html') || errorMessage.includes('YouTube made a change')) {
+            // For parsing errors, wait longer and try with fresh headers
+            if (attempts < maxAttempts) {
+              const delay = 3000 + Math.random() * 2000; // 3-5 seconds
+              console.warn(`YouTube parsing error, waiting ${Math.round(delay/1000)}s before retry ${attempts}/${maxAttempts}...`);
+              await new Promise(resolve => setTimeout(resolve, delay));
+              continue; // Retry with different headers
+            }
+            throw new Error('YouTube has changed their structure. Please try again later or use a different video.');
+          }
+          
           // Check for bot detection errors
           if (errorMessage.includes('bot') || 
               errorMessage.includes('Sign in to confirm') || 
@@ -301,7 +313,9 @@ class YouTubeService {
       const errorMessage = error?.message || error?.toString() || 'Unknown error';
       
       // Provide user-friendly error messages
-      if (errorMessage.includes('bot') || errorMessage.includes('Sign in to confirm')) {
+      if (errorMessage.includes('parsing watch.html') || errorMessage.includes('YouTube made a change')) {
+        throw new Error('YouTube has changed their structure. The library needs an update. Please try again later or use a different video.');
+      } else if (errorMessage.includes('bot') || errorMessage.includes('Sign in to confirm')) {
         throw new Error('YouTube is blocking automated access. This video may require manual verification. Please try again later.');
       } else if (errorMessage.includes('Private video')) {
         throw new Error('This video is private and cannot be accessed.');
