@@ -125,18 +125,50 @@ class YouTubeService {
         throw new Error(`YouTube URL validation failed: ${url.substring(0, 50)}`);
       }
 
-      // Get video info using ytdl-core with retry logic
+      // Get video info using ytdl-core with retry logic and advanced bot detection bypass
       let videoInfo;
       let attempts = 0;
-      const maxAttempts = 3;
+      const maxAttempts = 5; // Increased retries
+      
+      // Generate realistic browser headers to bypass bot detection
+      const getRealisticHeaders = () => {
+        const userAgents = [
+          'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+          'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+          'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+          'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:121.0) Gecko/20100101 Firefox/121.0',
+          'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.1 Safari/605.1.15'
+        ];
+        
+        const randomUA = userAgents[Math.floor(Math.random() * userAgents.length)];
+        
+        return {
+          'User-Agent': randomUA,
+          'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
+          'Accept-Language': 'en-US,en;q=0.9',
+          'Accept-Encoding': 'gzip, deflate, br',
+          'DNT': '1',
+          'Connection': 'keep-alive',
+          'Upgrade-Insecure-Requests': '1',
+          'Sec-Fetch-Dest': 'document',
+          'Sec-Fetch-Mode': 'navigate',
+          'Sec-Fetch-Site': 'none',
+          'Sec-Fetch-User': '?1',
+          'Cache-Control': 'max-age=0'
+        };
+      };
       
       while (attempts < maxAttempts) {
         try {
+          // Add random delay between retries to appear more human-like
+          if (attempts > 0) {
+            const delay = 2000 + Math.random() * 3000; // 2-5 seconds
+            await new Promise(resolve => setTimeout(resolve, delay));
+          }
+          
           videoInfo = await ytdl.getInfo(url, {
             requestOptions: {
-              headers: {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-              }
+              headers: getRealisticHeaders()
             }
           });
           break;
@@ -145,7 +177,14 @@ class YouTubeService {
           const errorMessage = error?.message || error?.toString() || '';
           
           // Check for bot detection errors
-          if (errorMessage.includes('bot') || errorMessage.includes('Sign in to confirm')) {
+          if (errorMessage.includes('bot') || errorMessage.includes('Sign in to confirm') || errorMessage.includes('429')) {
+            // For bot detection, wait longer before retrying
+            if (attempts < maxAttempts) {
+              const delay = 5000 + Math.random() * 5000; // 5-10 seconds
+              console.warn(`Bot detection encountered, waiting ${Math.round(delay/1000)}s before retry ${attempts}/${maxAttempts}...`);
+              await new Promise(resolve => setTimeout(resolve, delay));
+              continue; // Retry with different headers
+            }
             throw new Error('YouTube is blocking automated access. Please try again later or use a different video.');
           }
           
@@ -216,29 +255,69 @@ class YouTubeService {
         throw new Error(`YouTube URL validation failed: ${url.substring(0, 50)}`);
       }
 
-      // Get video info to determine best format with retry logic
+      // Get video info to determine best format with retry logic and advanced bot detection bypass
       let videoInfo;
       let attempts = 0;
-      const maxAttempts = 3;
+      const maxAttempts = 5; // Increased retries
       
-      const ytdlOptions = {
-        requestOptions: {
-          headers: {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-          }
-        }
+      // Generate realistic browser headers to bypass bot detection
+      const getRealisticHeaders = () => {
+        const userAgents = [
+          'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+          'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+          'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+          'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:121.0) Gecko/20100101 Firefox/121.0',
+          'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.1 Safari/605.1.15'
+        ];
+        
+        const randomUA = userAgents[Math.floor(Math.random() * userAgents.length)];
+        
+        return {
+          'User-Agent': randomUA,
+          'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
+          'Accept-Language': 'en-US,en;q=0.9',
+          'Accept-Encoding': 'gzip, deflate, br',
+          'DNT': '1',
+          'Connection': 'keep-alive',
+          'Upgrade-Insecure-Requests': '1',
+          'Sec-Fetch-Dest': 'document',
+          'Sec-Fetch-Mode': 'navigate',
+          'Sec-Fetch-Site': 'none',
+          'Sec-Fetch-User': '?1',
+          'Cache-Control': 'max-age=0',
+          'Referer': 'https://www.youtube.com/'
+        };
       };
+      
+      const getYtdlOptions = () => ({
+        requestOptions: {
+          headers: getRealisticHeaders()
+        }
+      });
       
       while (attempts < maxAttempts) {
         try {
-          videoInfo = await ytdl.getInfo(url, ytdlOptions);
+          // Add random delay between retries to appear more human-like
+          if (attempts > 0) {
+            const delay = 2000 + Math.random() * 3000; // 2-5 seconds
+            await new Promise(resolve => setTimeout(resolve, delay));
+          }
+          
+          videoInfo = await ytdl.getInfo(url, getYtdlOptions());
           break;
         } catch (error) {
           attempts++;
           const errorMessage = error?.message || error?.toString() || '';
           
           // Check for bot detection errors
-          if (errorMessage.includes('bot') || errorMessage.includes('Sign in to confirm')) {
+          if (errorMessage.includes('bot') || errorMessage.includes('Sign in to confirm') || errorMessage.includes('429')) {
+            // For bot detection, wait longer before retrying
+            if (attempts < maxAttempts) {
+              const delay = 5000 + Math.random() * 5000; // 5-10 seconds
+              console.warn(`Bot detection encountered, waiting ${Math.round(delay/1000)}s before retry ${attempts}/${maxAttempts}...`);
+              await new Promise(resolve => setTimeout(resolve, delay));
+              continue; // Retry with different headers
+            }
             throw new Error('YouTube is blocking automated access. Please try again later or use a different video.');
           }
           
@@ -249,6 +328,31 @@ class YouTubeService {
           await new Promise(resolve => setTimeout(resolve, 1000 * attempts));
         }
       }
+      
+      const videoDetails = videoInfo.videoDetails;
+      
+      // Choose the best available format
+      const formats = ytdl.filterFormats(videoInfo.formats, 'videoandaudio');
+      let format;
+      
+      if (formats.length > 0) {
+        // Prefer mp4 format with audio
+        format = formats.find(f => f.container === 'mp4') || formats[0];
+      } else {
+        // Fallback to video only format
+        const videoFormats = ytdl.filterFormats(videoInfo.formats, 'videoonly');
+        format = videoFormats.find(f => f.container === 'mp4') || videoFormats[0];
+      }
+
+      if (!format) {
+        throw new Error('No suitable video format found');
+      }
+
+      // Create download stream with options
+      const stream = ytdl(url, { 
+        format: format,
+        ...getYtdlOptions()
+      });
       
       const videoDetails = videoInfo.videoDetails;
       
