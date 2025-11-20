@@ -557,6 +557,14 @@ app.post('/api/download', async (req, res) => {
 
     console.log('Download request received:', { url: url?.substring(0, 50), hasUrl: !!url, type });
 
+    // Temporary: Check if downloads are enabled (can be disabled via env var if issues persist)
+    if (process.env.DISABLE_DOWNLOADS === 'true') {
+      return res.status(503).json({
+        error: 'Video downloads are temporarily disabled due to YouTube API changes. Please check back later.',
+        code: 'DOWNLOADS_DISABLED'
+      });
+    }
+
     if (!url) {
       return res.status(400).json({ 
         error: 'URL is required',
@@ -638,6 +646,17 @@ app.post('/api/download', async (req, res) => {
   } catch (error) {
     console.error('Download error:', error);
     const errorMessage = error?.message || error?.toString() || 'Unknown error occurred';
+    
+    // Check for parsing errors - this is a known issue with YouTube changes
+    if (errorMessage.includes('parsing watch.html') || errorMessage.includes('YouTube made a change')) {
+      if (!res.headersSent) {
+        return res.status(503).json({
+          error: 'YouTube has recently changed their structure. The download feature is temporarily unavailable. Please try again later or use the extract feature to view video information.',
+          code: 'YOUTUBE_STRUCTURE_CHANGED',
+          retryAfter: 3600 // Suggest retrying after 1 hour
+        });
+      }
+    }
     
     // Don't send response if headers already sent
     if (!res.headersSent) {

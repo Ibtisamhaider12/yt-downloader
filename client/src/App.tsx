@@ -578,6 +578,14 @@ function App() {
         } else {
           errorMessage = 'Invalid YouTube URL or video not available';
         }
+      } else if (error.response?.status === 503) {
+        // Service unavailable - YouTube structure changed or downloads disabled
+        const serverError = response.data;
+        if (serverError?.error) {
+          errorMessage = serverError.error;
+        } else {
+          errorMessage = 'Download service is temporarily unavailable. Please try again later.';
+        }
       } else if (error.response?.status === 500) {
         errorMessage = 'Server error - please try again later';
       } else if (error.message) {
