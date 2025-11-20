@@ -10,6 +10,10 @@ require('dotenv').config({ path: process.env.ENV_FILE_PATH || './config.env' });
 
 const app = express();
 const PORT = process.env.PORT || 5001;
+// Default to production if NODE_ENV is not set (for Railway deployments)
+if (!process.env.NODE_ENV) {
+  process.env.NODE_ENV = 'production';
+}
 
 // Security middleware
 app.use(helmet({

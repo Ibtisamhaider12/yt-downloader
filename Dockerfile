@@ -58,14 +58,14 @@ COPY --from=builder /app/client/build ./public
 # Copy server code
 COPY server/ ./
 
-# Create health check script
-RUN echo '#!/bin/sh\ncurl -f http://localhost:5001/api/health || exit 1' > /usr/local/bin/healthcheck.sh && \
+# Create health check script (uses PORT env var from Railway)
+RUN echo '#!/bin/sh\nPORT=${PORT:-5001}\ncurl -f http://localhost:${PORT}/api/health || exit 1' > /usr/local/bin/healthcheck.sh && \
     chmod +x /usr/local/bin/healthcheck.sh
 
 # Switch to non-root user
 USER youtube-downloader
 
-# Expose port
+# Expose port (Railway will use PORT env var, but we expose default for Docker)
 EXPOSE 5001
 
 # Health check
