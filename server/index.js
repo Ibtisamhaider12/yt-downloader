@@ -5,6 +5,8 @@ const compression = require('compression');
 const rateLimit = require('express-rate-limit');
 const ytdl = require('@distube/ytdl-core');
 const path = require('path');
+const os = require('os');
+const fs = require('fs');
 // Load environment variables (Railway provides PORT automatically)
 require('dotenv').config({ path: process.env.ENV_FILE_PATH || './config.env' });
 
@@ -14,6 +16,18 @@ const PORT = process.env.PORT || 5001;
 if (!process.env.NODE_ENV) {
   process.env.NODE_ENV = 'production';
 }
+
+// Set up temp directory for ytdl-core (fixes permission issues in Docker)
+const os = require('os');
+const fs = require('fs');
+const tempDir = path.join(os.tmpdir(), 'ytdl-temp');
+if (!fs.existsSync(tempDir)) {
+  fs.mkdirSync(tempDir, { recursive: true });
+}
+// Set TMPDIR environment variable for ytdl-core
+process.env.TMPDIR = tempDir;
+process.env.TMP = tempDir;
+process.env.TEMP = tempDir;
 
 // Trust proxy - Required for Railway and other cloud platforms
 // Trust only the first proxy (Railway's proxy) for security and proper rate limiting
@@ -176,13 +190,30 @@ class YouTubeService {
         } catch (error) {
           attempts++;
           const errorMessage = error?.message || error?.toString() || '';
+          const errorStack = error?.stack || '';
+          
+          // Log detailed error information
+          console.error(`YouTube extract attempt ${attempts} error:`, {
+            message: errorMessage,
+            code: error?.code,
+            statusCode: error?.statusCode,
+            response: error?.response?.statusCode,
+            errorType: error?.name
+          });
           
           // Check for bot detection errors
-          if (errorMessage.includes('bot') || errorMessage.includes('Sign in to confirm') || errorMessage.includes('429')) {
+          if (errorMessage.includes('bot') || 
+              errorMessage.includes('Sign in to confirm') || 
+              errorMessage.includes('429') ||
+              errorMessage.includes('403') ||
+              errorMessage.includes('Sign in') ||
+              errorStack.includes('bot') ||
+              error?.statusCode === 403 ||
+              error?.response?.statusCode === 403) {
             // For bot detection, wait longer before retrying
             if (attempts < maxAttempts) {
               const delay = 5000 + Math.random() * 5000; // 5-10 seconds
-              console.warn(`Bot detection encountered, waiting ${Math.round(delay/1000)}s before retry ${attempts}/${maxAttempts}...`);
+              console.warn(`Bot detection encountered (${errorMessage.substring(0, 100)}), waiting ${Math.round(delay/1000)}s before retry ${attempts}/${maxAttempts}...`);
               await new Promise(resolve => setTimeout(resolve, delay));
               continue; // Retry with different headers
             }
@@ -190,9 +221,10 @@ class YouTubeService {
           }
           
           if (attempts >= maxAttempts) {
+            console.error(`All ${maxAttempts} attempts failed. Final error:`, errorMessage);
             throw error;
           }
-          console.warn(`YouTube info extraction attempt ${attempts} failed, retrying...`);
+          console.warn(`YouTube info extraction attempt ${attempts} failed, retrying... Error: ${errorMessage.substring(0, 100)}`);
           await new Promise(resolve => setTimeout(resolve, 1000 * attempts));
         }
       }
@@ -309,13 +341,30 @@ class YouTubeService {
         } catch (error) {
           attempts++;
           const errorMessage = error?.message || error?.toString() || '';
+          const errorStack = error?.stack || '';
+          
+          // Log detailed error information
+          console.error(`YouTube download attempt ${attempts} error:`, {
+            message: errorMessage,
+            code: error?.code,
+            statusCode: error?.statusCode,
+            response: error?.response?.statusCode,
+            errorType: error?.name
+          });
           
           // Check for bot detection errors
-          if (errorMessage.includes('bot') || errorMessage.includes('Sign in to confirm') || errorMessage.includes('429')) {
+          if (errorMessage.includes('bot') || 
+              errorMessage.includes('Sign in to confirm') || 
+              errorMessage.includes('429') ||
+              errorMessage.includes('403') ||
+              errorMessage.includes('Sign in') ||
+              errorStack.includes('bot') ||
+              error?.statusCode === 403 ||
+              error?.response?.statusCode === 403) {
             // For bot detection, wait longer before retrying
             if (attempts < maxAttempts) {
               const delay = 5000 + Math.random() * 5000; // 5-10 seconds
-              console.warn(`Bot detection encountered, waiting ${Math.round(delay/1000)}s before retry ${attempts}/${maxAttempts}...`);
+              console.warn(`Bot detection encountered (${errorMessage.substring(0, 100)}), waiting ${Math.round(delay/1000)}s before retry ${attempts}/${maxAttempts}...`);
               await new Promise(resolve => setTimeout(resolve, delay));
               continue; // Retry with different headers
             }
@@ -323,9 +372,10 @@ class YouTubeService {
           }
           
           if (attempts >= maxAttempts) {
+            console.error(`All ${maxAttempts} attempts failed. Final error:`, errorMessage);
             throw error;
           }
-          console.warn(`YouTube download info attempt ${attempts} failed, retrying...`);
+          console.warn(`YouTube download info attempt ${attempts} failed, retrying... Error: ${errorMessage.substring(0, 100)}`);
           await new Promise(resolve => setTimeout(resolve, 1000 * attempts));
         }
       }

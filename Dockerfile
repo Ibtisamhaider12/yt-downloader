@@ -58,6 +58,11 @@ COPY --from=builder /app/client/build ./public
 # Copy server code
 COPY server/ ./
 
+# Create temp directory for ytdl-core with proper permissions
+RUN mkdir -p /tmp/ytdl-temp && \
+    chown -R youtube-downloader:nodejs /tmp/ytdl-temp && \
+    chmod 755 /tmp/ytdl-temp
+
 # Create health check script (uses PORT env var from Railway)
 RUN echo '#!/bin/sh\nPORT=${PORT:-5001}\ncurl -f http://localhost:${PORT}/api/health || exit 1' > /usr/local/bin/healthcheck.sh && \
     chmod +x /usr/local/bin/healthcheck.sh
