@@ -354,31 +354,6 @@ class YouTubeService {
         ...getYtdlOptions()
       });
       
-      const videoDetails = videoInfo.videoDetails;
-      
-      // Choose the best available format
-      const formats = ytdl.filterFormats(videoInfo.formats, 'videoandaudio');
-      let format;
-      
-      if (formats.length > 0) {
-        // Prefer mp4 format with audio
-        format = formats.find(f => f.container === 'mp4') || formats[0];
-      } else {
-        // Fallback to video only format
-        const videoFormats = ytdl.filterFormats(videoInfo.formats, 'videoonly');
-        format = videoFormats.find(f => f.container === 'mp4') || videoFormats[0];
-      }
-
-      if (!format) {
-        throw new Error('No suitable video format found');
-      }
-
-      // Create download stream with options
-      const stream = ytdl(url, { 
-        format: format,
-        ...ytdlOptions
-      });
-      
       // Generate filename
       const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
       const safeTitle = videoDetails.title.replace(/[^a-zA-Z0-9\s]/g, '').substring(0, 50);
