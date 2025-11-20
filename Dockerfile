@@ -62,9 +62,9 @@ COPY server/ ./
 # Also make app directory writable for ytdl-core fallback
 RUN mkdir -p /tmp/ytdl-temp && \
     chown -R youtube-downloader:nodejs /tmp/ytdl-temp && \
-    chmod 755 /tmp/ytdl-temp && \
+    chmod 777 /tmp/ytdl-temp && \
     chown -R youtube-downloader:nodejs /app && \
-    chmod 755 /app
+    chmod 777 /app
 
 # Create health check script (uses PORT env var from Railway)
 RUN echo '#!/bin/sh\nPORT=${PORT:-5001}\ncurl -f http://localhost:${PORT}/api/health || exit 1' > /usr/local/bin/healthcheck.sh && \
