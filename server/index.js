@@ -107,14 +107,18 @@ const YOUTUBE_URL_REGEX = /^https?:\/\/(?:www\.)?(?:youtube\.com\/(?:watch\?v=|e
 class YouTubeService {
   static async extractMediaInfo(url) {
     try {
+      if (!url || typeof url !== 'string') {
+        throw new Error('URL is required and must be a string');
+      }
+
       // Validate YouTube URL
       if (!YOUTUBE_URL_REGEX.test(url)) {
-        throw new Error('Invalid YouTube URL format');
+        throw new Error(`Invalid YouTube URL format: ${url.substring(0, 50)}`);
       }
 
       // Validate URL with ytdl-core
       if (!ytdl.validateURL(url)) {
-        throw new Error('Invalid YouTube URL');
+        throw new Error(`YouTube URL validation failed: ${url.substring(0, 50)}`);
       }
 
       // Get video info using ytdl-core with retry logic
@@ -173,9 +177,13 @@ class YouTubeService {
 
   static async downloadMedia(url, type = 'video') {
     try {
+      if (!url || typeof url !== 'string') {
+        throw new Error('URL is required and must be a string');
+      }
+
       // Validate YouTube URL
       if (!ytdl.validateURL(url)) {
-        throw new Error('Invalid YouTube URL');
+        throw new Error(`YouTube URL validation failed: ${url.substring(0, 50)}`);
       }
 
       // Get video info to determine best format with retry logic
@@ -252,10 +260,19 @@ app.post('/api/extract', async (req, res) => {
   try {
     const { url } = req.body;
 
+    console.log('Extract request received:', { url: url?.substring(0, 50), hasUrl: !!url });
+
     if (!url) {
       return res.status(400).json({ 
         error: 'URL is required',
         code: 'MISSING_URL'
+      });
+    }
+
+    if (typeof url !== 'string') {
+      return res.status(400).json({ 
+        error: 'URL must be a string',
+        code: 'INVALID_URL_TYPE'
       });
     }
 
@@ -266,10 +283,12 @@ app.post('/api/extract', async (req, res) => {
       data: mediaInfo
     });
   } catch (error) {
-    console.error('Extract error:', error.message);
+    console.error('Extract error:', error);
+    const errorMessage = error?.message || error?.toString() || 'Unknown error occurred';
     res.status(400).json({
-      error: error.message,
-      code: 'EXTRACTION_FAILED'
+      error: errorMessage,
+      code: 'EXTRACTION_FAILED',
+      details: process.env.NODE_ENV === 'development' ? error.stack : undefined
     });
   }
 });
@@ -278,6 +297,8 @@ app.post('/api/download', async (req, res) => {
   try {
     const { url, type = 'video' } = req.body;
 
+    console.log('Download request received:', { url: url?.substring(0, 50), hasUrl: !!url, type });
+
     if (!url) {
       return res.status(400).json({ 
         error: 'URL is required',
@@ -285,8 +306,16 @@ app.post('/api/download', async (req, res) => {
       });
     }
 
+    if (typeof url !== 'string') {
+      return res.status(400).json({ 
+        error: 'URL must be a string',
+        code: 'INVALID_URL_TYPE'
+      });
+    }
+
     // Validate YouTube URL format
     if (!YOUTUBE_URL_REGEX.test(url)) {
+      console.log('URL validation failed:', url);
       return res.status(400).json({
         error: 'Invalid YouTube URL format',
         code: 'INVALID_URL_FORMAT'
@@ -323,13 +352,15 @@ app.post('/api/download', async (req, res) => {
 
     downloadInfo.stream.pipe(res);
   } catch (error) {
-    console.error('Download error:', error.message);
+    console.error('Download error:', error);
+    const errorMessage = error?.message || error?.toString() || 'Unknown error occurred';
     
     // Don't send response if headers already sent
     if (!res.headersSent) {
       res.status(400).json({
-        error: error.message,
-        code: 'DOWNLOAD_FAILED'
+        error: errorMessage,
+        code: 'DOWNLOAD_FAILED',
+        details: process.env.NODE_ENV === 'development' ? error.stack : undefined
       });
     }
   }

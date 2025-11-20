@@ -562,13 +562,22 @@ function App() {
       }
     } catch (error: any) {
       console.error('Extract error:', error);
+      console.error('Error response:', error.response?.data);
       
       let errorMessage = 'Failed to extract video information';
       
       if (error.code === 'ECONNABORTED') {
         errorMessage = 'Request timeout - please try again';
       } else if (error.response?.status === 400) {
-        errorMessage = error.response?.data?.error || 'Invalid YouTube URL';
+        // Try to get error message from response
+        const serverError = error.response?.data;
+        if (serverError?.error) {
+          errorMessage = serverError.error;
+        } else if (typeof serverError === 'string') {
+          errorMessage = serverError;
+        } else {
+          errorMessage = 'Invalid YouTube URL or video not available';
+        }
       } else if (error.response?.status === 500) {
         errorMessage = 'Server error - please try again later';
       } else if (error.message) {
@@ -647,13 +656,22 @@ function App() {
       toast.success('Video downloaded successfully!');
     } catch (error: any) {
       console.error('Download error:', error);
+      console.error('Error response:', error.response?.data);
       
       let errorMessage = 'Failed to download video';
       
       if (error.code === 'ECONNABORTED') {
         errorMessage = 'Download timeout - please try again';
       } else if (error.response?.status === 400) {
-        errorMessage = error.response?.data?.error || 'Invalid video URL or format';
+        // Try to get error message from response
+        const serverError = error.response?.data;
+        if (serverError?.error) {
+          errorMessage = serverError.error;
+        } else if (typeof serverError === 'string') {
+          errorMessage = serverError;
+        } else {
+          errorMessage = 'Invalid video URL or video not available for download';
+        }
       } else if (error.response?.status === 500) {
         errorMessage = 'Server error - please try again later';
       } else if (error.message) {
