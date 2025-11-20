@@ -39,6 +39,18 @@ try {
   console.error(`Temp directory not writable: ${tempDir}`, err);
 }
 
+// CRITICAL FIX: Change working directory to temp directory
+// ytdl-core writes to current directory, so we need to be in a writable location
+const originalCwd = process.cwd();
+try {
+  process.chdir(tempDir);
+  console.log(`Changed working directory from ${originalCwd} to ${tempDir}`);
+  console.log(`Current working directory: ${process.cwd()}`);
+} catch (err) {
+  console.error(`Failed to change working directory to ${tempDir}:`, err);
+  console.error('Will try to continue, but may have permission issues');
+}
+
 // Trust proxy - Required for Railway and other cloud platforms
 // Trust only the first proxy (Railway's proxy) for security and proper rate limiting
 // Setting to 1 instead of true prevents rate limit bypass attacks
@@ -595,7 +607,8 @@ app.post('/api/download', async (req, res) => {
 
 // Serve static files from React build
 if (process.env.NODE_ENV === 'production') {
-  const publicPath = path.join(__dirname, 'public');
+  // Use absolute path to public directory (important since we changed working directory)
+  const publicPath = path.resolve(__dirname, 'public');
   console.log('Serving static files from:', publicPath);
   
   // Serve static files (including manifest icons) - must be before API routes
