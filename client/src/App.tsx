@@ -625,13 +625,28 @@ function App() {
 
       // Check response status - if error (4xx), parse blob as JSON
       if (response.status >= 400) {
+        let errorMessage = `Download failed with status ${response.status}`;
         try {
-          const text = await response.data.text();
-          const errorData = JSON.parse(text);
-          throw new Error(errorData.error || 'Download failed');
+          if (response.data instanceof Blob) {
+            const text = await response.data.text();
+            if (text) {
+              try {
+                const errorData = JSON.parse(text);
+                errorMessage = errorData.error || errorMessage;
+              } catch (jsonError) {
+                // If not JSON, use the text or default message
+                if (text.length < 200) {
+                  errorMessage = text || errorMessage;
+                }
+              }
+            }
+          }
         } catch (parseError) {
-          throw new Error(`Download failed with status ${response.status}`);
+          console.error('Error parsing error response:', parseError);
         }
+        const downloadError: any = new Error(errorMessage);
+        downloadError.response = response; // Preserve response for error handling
+        throw downloadError;
       }
 
       // Check if response is actually a blob
@@ -683,39 +698,57 @@ function App() {
       toast.success('Video downloaded successfully!');
     } catch (error: any) {
       console.error('Download error:', error);
-      console.error('Error response:', error.response?.data);
+      console.error('Error response:', error.response);
+      console.error('Error response data:', error.response?.data);
       
       let errorMessage = 'Failed to download video';
       
-      // Handle blob error responses (when server returns JSON but client expects blob)
-      if (error.response?.data instanceof Blob) {
-        try {
-          const text = await error.response.data.text();
-          if (text) {
-            const errorData = JSON.parse(text);
-            errorMessage = errorData.error || 'Download failed';
+      // Check if error has a response (from our custom error or axios)
+      const response = error.response;
+      
+      if (response) {
+        // Handle blob error responses (when server returns JSON but client expects blob)
+        if (response.data instanceof Blob) {
+          try {
+            const text = await response.data.text();
+            console.log('Blob error text:', text);
+            if (text) {
+              try {
+                const errorData = JSON.parse(text);
+                errorMessage = errorData.error || 'Download failed';
+                console.log('Parsed error data:', errorData);
+              } catch (jsonError) {
+                // If not JSON, use the text if it's short
+                if (text.length < 200 && text.trim()) {
+                  errorMessage = text;
+                } else {
+                  errorMessage = `Download failed: ${response.status} ${response.statusText}`;
+                }
+              }
+            }
+          } catch (parseError) {
+            console.error('Could not parse blob error response:', parseError);
+            // If we can't parse, check if it's a small blob (likely error)
+            if (response.data.size < 1000) {
+              errorMessage = 'Server returned an error response';
+            } else {
+              errorMessage = `Download failed: ${response.status} ${response.statusText}`;
+            }
           }
-        } catch (parseError) {
-          // If we can't parse, check if it's a small blob (likely error)
-          if (error.response.data.size < 1000) {
-            errorMessage = 'Server returned an error response';
-          }
-          console.error('Could not parse error response:', parseError);
+        } else if (response.data?.error) {
+          // Direct JSON error response
+          errorMessage = response.data.error;
+        } else if (typeof response.data === 'string') {
+          errorMessage = response.data;
+        } else if (response.status === 400) {
+          errorMessage = 'Invalid video URL or video not available for download';
+        } else if (response.status === 500) {
+          errorMessage = 'Server error - please try again later';
+        } else {
+          errorMessage = `Download failed: ${response.status} ${response.statusText}`;
         }
       } else if (error.code === 'ECONNABORTED') {
         errorMessage = 'Download timeout - please try again';
-      } else if (error.response?.status === 400) {
-        // Try to get error message from response
-        const serverError = error.response?.data;
-        if (serverError?.error) {
-          errorMessage = serverError.error;
-        } else if (typeof serverError === 'string') {
-          errorMessage = serverError;
-        } else {
-          errorMessage = 'Invalid video URL or video not available for download';
-        }
-      } else if (error.response?.status === 500) {
-        errorMessage = 'Server error - please try again later';
       } else if (error.message) {
         errorMessage = error.message;
       }

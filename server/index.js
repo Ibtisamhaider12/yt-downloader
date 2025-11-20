@@ -15,6 +15,10 @@ if (!process.env.NODE_ENV) {
   process.env.NODE_ENV = 'production';
 }
 
+// Trust proxy - Required for Railway and other cloud platforms
+// This allows Express to correctly identify client IPs behind proxies
+app.set('trust proxy', true);
+
 // Security middleware
 app.use(helmet({
   contentSecurityPolicy: {
@@ -128,10 +132,23 @@ class YouTubeService {
       
       while (attempts < maxAttempts) {
         try {
-          videoInfo = await ytdl.getInfo(url);
+          videoInfo = await ytdl.getInfo(url, {
+            requestOptions: {
+              headers: {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+              }
+            }
+          });
           break;
         } catch (error) {
           attempts++;
+          const errorMessage = error?.message || error?.toString() || '';
+          
+          // Check for bot detection errors
+          if (errorMessage.includes('bot') || errorMessage.includes('Sign in to confirm')) {
+            throw new Error('YouTube is blocking automated access. Please try again later or use a different video.');
+          }
+          
           if (attempts >= maxAttempts) {
             throw error;
           }
@@ -156,7 +173,20 @@ class YouTubeService {
       };
     } catch (error) {
       console.error('YouTube extraction error:', error.message);
-      throw new Error(`Failed to extract YouTube media: ${error.message}`);
+      const errorMessage = error?.message || error?.toString() || 'Unknown error';
+      
+      // Provide user-friendly error messages
+      if (errorMessage.includes('bot') || errorMessage.includes('Sign in to confirm')) {
+        throw new Error('YouTube is blocking automated access. This video may require manual verification. Please try again later.');
+      } else if (errorMessage.includes('Private video')) {
+        throw new Error('This video is private and cannot be accessed.');
+      } else if (errorMessage.includes('Video unavailable')) {
+        throw new Error('This video is unavailable or has been removed.');
+      } else if (errorMessage.includes('Age-restricted')) {
+        throw new Error('This video is age-restricted and cannot be accessed.');
+      } else {
+        throw new Error(`Failed to extract YouTube media: ${errorMessage}`);
+      }
     }
   }
 
@@ -191,12 +221,27 @@ class YouTubeService {
       let attempts = 0;
       const maxAttempts = 3;
       
+      const ytdlOptions = {
+        requestOptions: {
+          headers: {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+          }
+        }
+      };
+      
       while (attempts < maxAttempts) {
         try {
-          videoInfo = await ytdl.getInfo(url);
+          videoInfo = await ytdl.getInfo(url, ytdlOptions);
           break;
         } catch (error) {
           attempts++;
+          const errorMessage = error?.message || error?.toString() || '';
+          
+          // Check for bot detection errors
+          if (errorMessage.includes('bot') || errorMessage.includes('Sign in to confirm')) {
+            throw new Error('YouTube is blocking automated access. Please try again later or use a different video.');
+          }
+          
           if (attempts >= maxAttempts) {
             throw error;
           }
@@ -224,8 +269,11 @@ class YouTubeService {
         throw new Error('No suitable video format found');
       }
 
-      // Create download stream
-      const stream = ytdl(url, { format: format });
+      // Create download stream with options
+      const stream = ytdl(url, { 
+        format: format,
+        ...ytdlOptions
+      });
       
       // Generate filename
       const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
@@ -241,7 +289,20 @@ class YouTubeService {
       };
     } catch (error) {
       console.error('YouTube download error:', error.message);
-      throw new Error(`Failed to download YouTube video: ${error.message}`);
+      const errorMessage = error?.message || error?.toString() || 'Unknown error';
+      
+      // Provide user-friendly error messages
+      if (errorMessage.includes('bot') || errorMessage.includes('Sign in to confirm')) {
+        throw new Error('YouTube is blocking automated access. This video may require manual verification. Please try again later.');
+      } else if (errorMessage.includes('Private video')) {
+        throw new Error('This video is private and cannot be downloaded.');
+      } else if (errorMessage.includes('Video unavailable')) {
+        throw new Error('This video is unavailable or has been removed.');
+      } else if (errorMessage.includes('Age-restricted')) {
+        throw new Error('This video is age-restricted and cannot be downloaded.');
+      } else {
+        throw new Error(`Failed to download YouTube video: ${errorMessage}`);
+      }
     }
   }
 }
@@ -394,20 +455,37 @@ app.post('/api/download', async (req, res) => {
 
 // Serve static files from React build
 if (process.env.NODE_ENV === 'production') {
-  // Serve static files (including manifest icons)
-  app.use(express.static(path.join(__dirname, 'public'), {
+  const publicPath = path.join(__dirname, 'public');
+  console.log('Serving static files from:', publicPath);
+  
+  // Serve static files (including manifest icons) - must be before API routes
+  app.use(express.static(publicPath, {
     maxAge: '1y', // Cache static assets
     etag: true,
-    lastModified: true
+    lastModified: true,
+    setHeaders: (res, filePath) => {
+      // Set proper content-type for images
+      if (filePath.endsWith('.png')) {
+        res.setHeader('Content-Type', 'image/png');
+      } else if (filePath.endsWith('.ico')) {
+        res.setHeader('Content-Type', 'image/x-icon');
+      } else if (filePath.endsWith('.svg')) {
+        res.setHeader('Content-Type', 'image/svg+xml');
+      }
+    }
   }));
   
   // Serve index.html for all non-API routes
-  app.get('*', (req, res) => {
+  app.get('*', (req, res, next) => {
     // Don't serve index.html for API routes
     if (req.path.startsWith('/api/')) {
       return res.status(404).json({ error: 'API endpoint not found' });
     }
-    res.sendFile(path.join(__dirname, 'public', 'index.html'));
+    // Don't serve index.html for static assets
+    if (req.path.match(/\.(png|jpg|jpeg|gif|ico|svg|js|css|json)$/)) {
+      return next(); // Let express.static handle it
+    }
+    res.sendFile(path.join(publicPath, 'index.html'));
   });
 }
 
