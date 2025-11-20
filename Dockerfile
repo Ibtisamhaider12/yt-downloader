@@ -39,10 +39,6 @@ RUN cd client && npm run build
 # Production stage
 FROM node:20-alpine AS production
 
-# Create non-root user
-RUN addgroup -g 1001 -S nodejs && \
-    adduser -S youtube-downloader -u 1001
-
 # Install curl for health checks
 RUN apk add --no-cache curl
 
@@ -58,20 +54,21 @@ COPY --from=builder /app/client/build ./public
 # Copy server code
 COPY server/ ./
 
-# Create temp directory for ytdl-core with proper permissions
-# Also make app directory writable for ytdl-core fallback
+# Create temp directory for ytdl-core - run as root for now to avoid permission issues
 RUN mkdir -p /tmp/ytdl-temp && \
-    chown -R youtube-downloader:nodejs /tmp/ytdl-temp && \
+    mkdir -p /app/temp && \
     chmod 777 /tmp/ytdl-temp && \
-    chown -R youtube-downloader:nodejs /app && \
+    chmod 777 /app/temp && \
     chmod 777 /app
 
 # Create health check script (uses PORT env var from Railway)
 RUN echo '#!/bin/sh\nPORT=${PORT:-5001}\ncurl -f http://localhost:${PORT}/api/health || exit 1' > /usr/local/bin/healthcheck.sh && \
     chmod +x /usr/local/bin/healthcheck.sh
 
-# Switch to non-root user
-USER youtube-downloader
+# Run as root to avoid permission issues with ytdl-core temp files
+# This is necessary because ytdl-core writes to current directory and permission setup is complex
+# In a more secure setup, you'd use a non-root user with carefully configured permissions
+USER root
 
 # Expose port (Railway will use PORT env var, but we expose default for Docker)
 EXPOSE 5001

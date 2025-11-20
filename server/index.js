@@ -18,40 +18,42 @@ if (!process.env.NODE_ENV) {
 }
 
 // Set up temp directory for ytdl-core (fixes permission issues in Docker)
-// Use /tmp/ytdl-temp explicitly to match Dockerfile
-const tempDir = '/tmp/ytdl-temp';
-const fallbackTempDir = path.join(os.tmpdir(), 'ytdl-temp');
+// Try multiple locations in order of preference
+const tempDirs = [
+  '/tmp/ytdl-temp',
+  '/app/temp',
+  path.join(os.tmpdir(), 'ytdl-temp'),
+  process.cwd()
+];
 
-// Try to create and use /tmp/ytdl-temp first (matches Dockerfile)
-let finalTempDir = tempDir;
-try {
-  if (!fs.existsSync(tempDir)) {
-    fs.mkdirSync(tempDir, { recursive: true, mode: 0o777 });
-  }
-  // Test write permission
-  const testFile = path.join(tempDir, 'test-write.tmp');
-  fs.writeFileSync(testFile, 'test');
-  fs.unlinkSync(testFile);
-  console.log(`✓ Temp directory ready and writable: ${tempDir}`);
-} catch (err) {
-  console.warn(`Failed to use ${tempDir}, trying fallback:`, err.message);
-  // Fallback to os.tmpdir()
-  finalTempDir = fallbackTempDir;
+let finalTempDir = null;
+let workingDirChanged = false;
+
+// Find first writable directory
+for (const dir of tempDirs) {
   try {
-    if (!fs.existsSync(finalTempDir)) {
-      fs.mkdirSync(finalTempDir, { recursive: true, mode: 0o777 });
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true, mode: 0o777 });
     }
-    const testFile = path.join(finalTempDir, 'test-write.tmp');
+    // Test write permission
+    const testFile = path.join(dir, 'test-write-' + Date.now() + '.tmp');
     fs.writeFileSync(testFile, 'test');
     fs.unlinkSync(testFile);
-    console.log(`✓ Fallback temp directory ready: ${finalTempDir}`);
-  } catch (fallbackErr) {
-    console.error(`✗ Both temp directories failed. Using current directory.`, fallbackErr);
-    finalTempDir = process.cwd();
+    finalTempDir = dir;
+    console.log(`✓ Found writable temp directory: ${finalTempDir}`);
+    break;
+  } catch (err) {
+    console.warn(`✗ Cannot use ${dir}: ${err.message}`);
+    continue;
   }
 }
 
-// Set TMPDIR environment variable for ytdl-core and other temp-related vars
+if (!finalTempDir) {
+  console.error('✗ CRITICAL: No writable directory found! ytdl-core will fail.');
+  finalTempDir = process.cwd();
+}
+
+// Set TMPDIR environment variable for ytdl-core
 process.env.TMPDIR = finalTempDir;
 process.env.TMP = finalTempDir;
 process.env.TEMP = finalTempDir;
@@ -61,13 +63,23 @@ process.env.TEMP = finalTempDir;
 const originalCwd = process.cwd();
 try {
   process.chdir(finalTempDir);
+  workingDirChanged = true;
   console.log(`✓ Changed working directory from ${originalCwd} to ${finalTempDir}`);
   console.log(`✓ Current working directory: ${process.cwd()}`);
-  console.log(`✓ Working directory writable: ${fs.accessSync(finalTempDir, fs.constants.W_OK) === undefined ? 'YES' : 'NO'}`);
+  
+  // Verify write access
+  try {
+    const verifyFile = path.join(process.cwd(), 'verify-write-' + Date.now() + '.tmp');
+    fs.writeFileSync(verifyFile, 'verify');
+    fs.unlinkSync(verifyFile);
+    console.log(`✓ Working directory is writable - ytdl-core should work!`);
+  } catch (verifyErr) {
+    console.error(`✗ WARNING: Working directory changed but not writable!`, verifyErr);
+  }
 } catch (err) {
   console.error(`✗ Failed to change working directory to ${finalTempDir}:`, err);
   console.error(`✗ Current directory: ${process.cwd()}`);
-  console.error(`✗ This will cause permission errors with ytdl-core!`);
+  console.error(`✗ ytdl-core will likely fail with permission errors!`);
 }
 
 // Trust proxy - Required for Railway and other cloud platforms
