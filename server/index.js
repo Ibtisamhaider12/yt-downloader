@@ -16,8 +16,9 @@ if (!process.env.NODE_ENV) {
 }
 
 // Trust proxy - Required for Railway and other cloud platforms
-// This allows Express to correctly identify client IPs behind proxies
-app.set('trust proxy', true);
+// Trust only the first proxy (Railway's proxy) for security and proper rate limiting
+// Setting to 1 instead of true prevents rate limit bypass attacks
+app.set('trust proxy', 1);
 
 // Security middleware
 app.use(helmet({
