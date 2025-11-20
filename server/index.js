@@ -18,8 +18,6 @@ if (!process.env.NODE_ENV) {
 }
 
 // Set up temp directory for ytdl-core (fixes permission issues in Docker)
-const os = require('os');
-const fs = require('fs');
 const tempDir = path.join(os.tmpdir(), 'ytdl-temp');
 if (!fs.existsSync(tempDir)) {
   fs.mkdirSync(tempDir, { recursive: true });
