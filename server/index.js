@@ -20,12 +20,24 @@ if (!process.env.NODE_ENV) {
 // Set up temp directory for ytdl-core (fixes permission issues in Docker)
 const tempDir = path.join(os.tmpdir(), 'ytdl-temp');
 if (!fs.existsSync(tempDir)) {
-  fs.mkdirSync(tempDir, { recursive: true });
+  try {
+    fs.mkdirSync(tempDir, { recursive: true, mode: 0o755 });
+  } catch (err) {
+    console.error('Failed to create temp directory:', err);
+  }
 }
-// Set TMPDIR environment variable for ytdl-core
+// Set TMPDIR environment variable for ytdl-core and other temp-related vars
 process.env.TMPDIR = tempDir;
 process.env.TMP = tempDir;
 process.env.TEMP = tempDir;
+
+// Verify temp directory is writable
+try {
+  fs.accessSync(tempDir, fs.constants.W_OK);
+  console.log(`Temp directory ready: ${tempDir}`);
+} catch (err) {
+  console.error(`Temp directory not writable: ${tempDir}`, err);
+}
 
 // Trust proxy - Required for Railway and other cloud platforms
 // Trust only the first proxy (Railway's proxy) for security and proper rate limiting
