@@ -580,7 +580,7 @@ function App() {
         }
       } else if (error.response?.status === 503) {
         // Service unavailable - YouTube structure changed or downloads disabled
-        const serverError = response.data;
+        const serverError = error.response.data;
         if (serverError?.error) {
           errorMessage = serverError.error;
         } else {
