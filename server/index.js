@@ -5,7 +5,8 @@ const compression = require('compression');
 const rateLimit = require('express-rate-limit');
 const ytdl = require('@distube/ytdl-core');
 const path = require('path');
-require('dotenv').config({ path: './config.env' });
+// Load environment variables (Railway provides PORT automatically)
+require('dotenv').config({ path: process.env.ENV_FILE_PATH || './config.env' });
 
 const app = express();
 const PORT = process.env.PORT || 5001;
@@ -48,8 +49,12 @@ const corsOptions = {
     // Allow requests with no origin (like mobile apps or curl requests)
     if (!origin) return callback(null, true);
     
+    // Get allowed origins from environment or use defaults
+    const allowedOriginsEnv = process.env.CORS_ORIGIN || process.env.RAILWAY_PUBLIC_DOMAIN || '';
+    const allowedOriginsList = allowedOriginsEnv.split(',').filter(Boolean);
+    
     const allowedOrigins = [
-      process.env.CORS_ORIGIN || 'http://localhost:3002',
+      ...allowedOriginsList,
       'http://localhost:3000',
       'http://localhost:3001',
       'http://localhost:3002',
@@ -59,6 +64,20 @@ const corsOptions = {
       'http://127.0.0.1:3002',
       'http://127.0.0.1:3003'
     ];
+    
+    // In production, allow requests from same origin (Railway serves both frontend and backend)
+    if (process.env.NODE_ENV === 'production') {
+      // Allow same-origin requests (Railway serves React build from same domain)
+      if (!origin || origin.startsWith('http://localhost') || origin.startsWith('http://127.0.0.1')) {
+        // Local development
+        if (allowedOrigins.indexOf(origin) !== -1) {
+          return callback(null, true);
+        }
+      } else {
+        // Production - allow same origin (Railway domain)
+        return callback(null, true);
+      }
+    }
     
     if (allowedOrigins.indexOf(origin) !== -1) {
       callback(null, true);

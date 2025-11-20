@@ -24,7 +24,19 @@ const ClearIcon = () => (
   </svg>
 );
 
-const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:5001/api';
+// API Base URL configuration
+// In production (Railway), use relative path since frontend and backend are served from same domain
+// In development, use the configured API URL or default to localhost
+const getApiBaseUrl = () => {
+  if (process.env.NODE_ENV === 'production') {
+    // Production: Use relative path (Railway serves React build from same domain as API)
+    return '/api';
+  }
+  // Development: Use environment variable or default to localhost
+  return process.env.REACT_APP_API_URL || 'http://localhost:5001/api';
+};
+
+const API_BASE_URL = getApiBaseUrl();
 
 interface MediaInfo {
   title: string;
