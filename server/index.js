@@ -322,8 +322,34 @@ app.post('/api/download', async (req, res) => {
       });
     }
 
-    const downloadInfo = await YouTubeService.downloadMedia(url, type);
+    // Validate URL with ytdl-core before attempting download
+    if (!ytdl.validateURL(url)) {
+      console.log('ytdl-core URL validation failed:', url);
+      return res.status(400).json({
+        error: 'Invalid YouTube URL or video not available',
+        code: 'INVALID_YOUTUBE_URL'
+      });
+    }
+
+    // Get download info - all errors must be caught here before setting headers
+    let downloadInfo;
+    try {
+      downloadInfo = await YouTubeService.downloadMedia(url, type);
+      
+      // Validate downloadInfo before proceeding
+      if (!downloadInfo || !downloadInfo.stream) {
+        throw new Error('Failed to initialize video download');
+      }
+    } catch (downloadError) {
+      console.error('Download initialization error:', downloadError);
+      const errorMessage = downloadError?.message || downloadError?.toString() || 'Failed to prepare video for download';
+      return res.status(400).json({
+        error: errorMessage,
+        code: 'DOWNLOAD_INIT_FAILED'
+      });
+    }
     
+    // Only set headers if we successfully got download info
     // Set appropriate headers for file download
     res.setHeader('Content-Type', downloadInfo.contentType);
     res.setHeader('Content-Disposition', `attachment; filename="${downloadInfo.filename}"`);
@@ -368,9 +394,19 @@ app.post('/api/download', async (req, res) => {
 
 // Serve static files from React build
 if (process.env.NODE_ENV === 'production') {
-  app.use(express.static(path.join(__dirname, 'public')));
+  // Serve static files (including manifest icons)
+  app.use(express.static(path.join(__dirname, 'public'), {
+    maxAge: '1y', // Cache static assets
+    etag: true,
+    lastModified: true
+  }));
   
+  // Serve index.html for all non-API routes
   app.get('*', (req, res) => {
+    // Don't serve index.html for API routes
+    if (req.path.startsWith('/api/')) {
+      return res.status(404).json({ error: 'API endpoint not found' });
+    }
     res.sendFile(path.join(__dirname, 'public', 'index.html'));
   });
 }

@@ -608,6 +608,7 @@ function App() {
       }, {
         responseType: 'blob',
         timeout: 300000, // 5 minutes timeout
+        validateStatus: (status) => status < 500, // Don't throw for 4xx, we'll handle it
         onDownloadProgress: (progressEvent) => {
           if (progressEvent.total) {
             const percentCompleted = Math.round((progressEvent.loaded * 100) / progressEvent.total);
@@ -622,16 +623,42 @@ function App() {
         }
       });
 
+      // Check response status - if error (4xx), parse blob as JSON
+      if (response.status >= 400) {
+        try {
+          const text = await response.data.text();
+          const errorData = JSON.parse(text);
+          throw new Error(errorData.error || 'Download failed');
+        } catch (parseError) {
+          throw new Error(`Download failed with status ${response.status}`);
+        }
+      }
+
       // Check if response is actually a blob
       if (!(response.data instanceof Blob)) {
         throw new Error('Invalid response format');
+      }
+
+      // Verify it's a video file by checking content type and size
+      const contentType = response.headers['content-type'] || '';
+      if (!contentType.includes('video') && !contentType.includes('application/octet-stream')) {
+        // Small blob might be an error JSON
+        if (response.data.size < 1000) {
+          try {
+            const text = await response.data.text();
+            const errorData = JSON.parse(text);
+            throw new Error(errorData.error || 'Download failed');
+          } catch (parseError) {
+            throw new Error('Received invalid response from server');
+          }
+        }
       }
 
       // Set progress to 100% when download completes
       setDownloadProgress(100);
 
       // Create download link
-      const blob = new Blob([response.data], { type: 'video/mp4' });
+      const blob = new Blob([response.data], { type: contentType || 'video/mp4' });
       const downloadUrl = window.URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = downloadUrl;
@@ -660,7 +687,22 @@ function App() {
       
       let errorMessage = 'Failed to download video';
       
-      if (error.code === 'ECONNABORTED') {
+      // Handle blob error responses (when server returns JSON but client expects blob)
+      if (error.response?.data instanceof Blob) {
+        try {
+          const text = await error.response.data.text();
+          if (text) {
+            const errorData = JSON.parse(text);
+            errorMessage = errorData.error || 'Download failed';
+          }
+        } catch (parseError) {
+          // If we can't parse, check if it's a small blob (likely error)
+          if (error.response.data.size < 1000) {
+            errorMessage = 'Server returned an error response';
+          }
+          console.error('Could not parse error response:', parseError);
+        }
+      } else if (error.code === 'ECONNABORTED') {
         errorMessage = 'Download timeout - please try again';
       } else if (error.response?.status === 400) {
         // Try to get error message from response
